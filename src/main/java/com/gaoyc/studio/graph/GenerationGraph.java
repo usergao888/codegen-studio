@@ -50,6 +50,7 @@ public class GenerationGraph {
     public static final String NODE_QA = "qa";
     public static final String NODE_REPAIR = "repair";
     public static final String NODE_PUBLISH = "publish";
+    public static final String NODE_STAGE = "stage";
 
     public record GraphOutcome(StudioState state, List<String> visitedNodes, long elapsedMs) {
     }
@@ -90,15 +91,17 @@ public class GenerationGraph {
         graph.addNode(NODE_QA, node_async(this::qaNode));
         graph.addNode(NODE_REPAIR, node_async(this::repairNode));
         graph.addNode(NODE_PUBLISH, node_async(this::publishNode));
+        graph.addNode(NODE_STAGE, node_async(this::stageNode));
 
         graph.addEdge(StateGraph.START, NODE_PARSE);
         graph.addEdge(NODE_PARSE, NODE_ENHANCE);
         graph.addEdge(NODE_ENHANCE, NODE_GENERATE);
         graph.addEdge(NODE_GENERATE, NODE_QA);
         graph.addConditionalEdges(NODE_QA, edge_async(this::afterQa),
-                Map.of("repair", NODE_REPAIR, "publish", NODE_PUBLISH));
+                Map.of("repair", NODE_REPAIR, "publish", NODE_PUBLISH, "stage", NODE_STAGE));
         graph.addEdge(NODE_REPAIR, NODE_QA);
         graph.addEdge(NODE_PUBLISH, StateGraph.END);
+        graph.addEdge(NODE_STAGE, StateGraph.END);
 
         CompiledGraph<StudioState> compiledGraph = graph.compile();
         // 回边如果没有上限，质检一直不合格就会把线程挂死
@@ -123,6 +126,7 @@ public class GenerationGraph {
         channels.put(StudioState.TIER, Channels.base(() -> ""));
         // 阶段名是累积的，用 appender 而不是覆盖
         channels.put(StudioState.STAGES, Channels.appender(ArrayList::new));
+        channels.put(StudioState.AWAITING_APPROVAL, Channels.base(() -> false));
         return channels;
     }
 
@@ -189,9 +193,20 @@ public class GenerationGraph {
 
     private String afterQa(StudioState state) {
         if (!state.hasBlockingIssues()) {
-            return "publish";
+            // 质检通过但开启了人工确认：停在发布前，不写盘
+            return properties.requireApproval() ? "stage" : "publish";
         }
-        return state.rounds() >= properties.maxRepairRounds() ? "publish" : "repair";
+        if (state.rounds() >= properties.maxRepairRounds()) {
+            return properties.requireApproval() ? "stage" : "publish";
+        }
+        return "repair";
+    }
+
+    /** 只把产物留在状态里（由 service 暂存），不落盘、不产生预览地址。 */
+    private Map<String, Object> stageNode(StudioState state) {
+        return Map.of(
+                StudioState.AWAITING_APPROVAL, true,
+                StudioState.STAGES, List.of(NODE_STAGE));
     }
 
     private String slugFor(AppSpec spec, String prompt) {

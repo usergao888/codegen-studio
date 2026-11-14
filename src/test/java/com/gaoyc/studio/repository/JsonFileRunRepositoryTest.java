@@ -18,7 +18,7 @@ public class JsonFileRunRepositoryTest {
     private static RunRecord record(String id, String prompt) {
         return new RunRecord(id, prompt, "todo-" + id, "/preview/todo-" + id + "/index.html",
                 true, 1, "deepseek-chat", "small", 0.0012, 120, false,
-                List.of("HTML_MISSING_VIEWPORT"), 4, "2026-11-14T00:00:00Z");
+                List.of("HTML_MISSING_VIEWPORT"), 4, "2026-11-14T00:00:00Z", "published");
     }
 
     private static Path tempFile() throws Exception {
@@ -64,7 +64,9 @@ public class JsonFileRunRepositoryTest {
         for (int i = 0; i < 5; i++) {
             repo.save(record("id" + i, "第 " + i + " 条"));
         }
-        assertEquals(5, repo.count());
+        // count() 与索引一致（总生成次数看 /api/metrics 的 generations）；
+        // 状态变更会追加同 runId 的记录，所以不能用落盘次数当 count
+        assertEquals(2, repo.count());
         assertEquals(2, repo.recent(10).size(), "内存索引只保留最近 2 条");
         assertEquals(5, Files.readAllLines(file, StandardCharsets.UTF_8).size(), "文件里仍是 5 行");
     }

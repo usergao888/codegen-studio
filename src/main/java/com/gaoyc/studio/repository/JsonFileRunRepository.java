@@ -78,7 +78,12 @@ public class JsonFileRunRepository implements RunRepository {
     }
 
     private void remember(RunRecord record) {
-        byId.put(record.runId(), record);
+        // 状态变更用"追加一条同 runId 的新记录"表达，因此这里要让后者覆盖前者：
+        // 先摘掉旧的（值相等即可删除），再插入新的
+        RunRecord previous = byId.put(record.runId(), record);
+        if (previous != null) {
+            recent.remove(previous);
+        }
         recent.addFirst(record);
         while (recent.size() > maxInMemory) {
             RunRecord evicted = recent.removeLast();
@@ -122,7 +127,9 @@ public class JsonFileRunRepository implements RunRepository {
 
     @Override
     public synchronized long count() {
-        return totalSeen;
+        // 返回"当前索引里的不同 run"，而不是落盘次数 ——
+        // 状态变更会追加同 runId 的记录，按落盘次数算会重复计数（被测试抓过）
+        return byId.size();
     }
 
     public Path file() {

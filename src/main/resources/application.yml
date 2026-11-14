@@ -21,6 +21,8 @@ studio:
   # 同一需求缓存多久（秒）
   cache-ttl-seconds: 1800
   cache-max-entries: 256
+  # true 时质检通过也不直接发布，先暂存等人确认（HITL）
+  require-approval: false
   # 质检失败后最多重生成几次
   max-repair-rounds: 2
   # 令牌桶：每个用户每秒补充多少个令牌、桶容量

@@ -26,7 +26,8 @@ public final class TestMain {
             com.gaoyc.studio.limit.TokenBucketRateLimiterTest.class,
             com.gaoyc.studio.limit.MultiLevelRateLimiterTest.class,
             com.gaoyc.studio.llm.ModelRouterTest.class,
-            com.gaoyc.studio.repository.JsonFileRunRepositoryTest.class
+            com.gaoyc.studio.repository.JsonFileRunRepositoryTest.class,
+            com.gaoyc.studio.service.ApprovalServiceTest.class
     );
 
     private TestMain() {

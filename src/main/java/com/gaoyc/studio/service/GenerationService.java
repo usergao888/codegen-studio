@@ -45,6 +45,7 @@ public class GenerationService {
     private final ModelRouter router;
     private final StudioMetrics metrics;
     private final RunRepository runRepository;
+    private final ApprovalService approvalService;
     private final StudioProperties properties;
 
     public GenerationService(GenerationGraph graph,
@@ -53,6 +54,7 @@ public class GenerationService {
                              ModelRouter router,
                              StudioMetrics metrics,
                              RunRepository runRepository,
+                             ApprovalService approvalService,
                              StudioProperties properties) {
         this.graph = graph;
         this.cache = cache;
@@ -60,6 +62,7 @@ public class GenerationService {
         this.router = router;
         this.metrics = metrics;
         this.runRepository = runRepository;
+        this.approvalService = approvalService;
         this.properties = properties;
     }
 
@@ -117,10 +120,12 @@ public class GenerationService {
         SiteDraft draft = finalState.draft();
         double cost = router.route(normalized).estimateCost(normalized.length());
 
+        String runId = UUID.randomUUID().toString().substring(0, 8);
+        boolean awaiting = finalState.awaitingApproval();
         GenerationResult result = new GenerationResult(
-                UUID.randomUUID().toString().substring(0, 8),
+                runId,
                 finalState.slug(),
-                finalState.previewUrl(),
+                awaiting ? "" : finalState.previewUrl(),
                 draft == null ? java.util.Map.of() : draft.files(),
                 finalState.initialIssues(),
                 finalState.issues(),
@@ -130,9 +135,15 @@ public class GenerationService {
                 cost,
                 false,
                 elapsed,
-                finalState.stages());
+                finalState.stages(),
+                awaiting ? GenerationResult.STATUS_PENDING : GenerationResult.STATUS_PUBLISHED);
 
-        cache.put(normalized, result);
+        // 待确认的产物不进缓存：审批结果不确定，缓存住会让后续请求一直拿到 pending
+        if (!result.isPending()) {
+            cache.put(normalized, result);
+        } else {
+            approvalService.stage(result, normalized, draft);
+        }
         metrics.recordGeneration(elapsed, cost);
         metrics.recordRepairs(finalState.rounds());
         // 记录首轮被质检拦下的缺陷码 —— 修好了不代表没发生过，这才是调参该看的信号

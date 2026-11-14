@@ -19,6 +19,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import com.gaoyc.studio.domain.GenerationResult;
 import com.gaoyc.studio.metrics.StudioMetrics;
 import com.gaoyc.studio.repository.RunRepository;
+import com.gaoyc.studio.service.ApprovalService;
 import com.gaoyc.studio.service.GenerationService;
 
 /** 生成接口：一个同步 JSON，一个 SSE 流式。 */
@@ -29,12 +30,15 @@ public class StudioController {
     private final GenerationService service;
     private final StudioMetrics metrics;
     private final RunRepository runRepository;
+    private final ApprovalService approvalService;
 
     public StudioController(GenerationService service, StudioMetrics metrics,
-                            RunRepository runRepository) {
+                            RunRepository runRepository,
+                            ApprovalService approvalService) {
         this.service = service;
         this.metrics = metrics;
         this.runRepository = runRepository;
+        this.approvalService = approvalService;
     }
 
     public record GenerateRequest(String prompt, String userId) {
@@ -107,6 +111,32 @@ public class StudioController {
         return runRepository.find(runId)
                 .<ResponseEntity<?>>map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /** 待人工确认的产物列表。 */
+    @GetMapping("/approvals")
+    public Map<String, Object> approvals() {
+        return Map.of("pending", approvalService.size(), "items", approvalService.list());
+    }
+
+    /** 人工确认通过：落盘并返回预览地址。 */
+    @PostMapping("/runs/{runId}/approve")
+    public ResponseEntity<?> approve(@org.springframework.web.bind.annotation.PathVariable("runId") String runId) {
+        return approvalService.approve(runId)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("error", "没有待确认的 runId：" + runId)));
+    }
+
+    /** 人工拒绝：产物丢弃，不写盘。 */
+    @PostMapping("/runs/{runId}/reject")
+    public ResponseEntity<?> reject(@org.springframework.web.bind.annotation.PathVariable("runId") String runId) {
+        boolean ok = approvalService.reject(runId);
+        if (!ok) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "没有待确认的 runId：" + runId));
+        }
+        return ResponseEntity.ok(Map.of("runId", runId, "status", "rejected"));
     }
 
     @GetMapping("/health")

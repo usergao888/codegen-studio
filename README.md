@@ -2,7 +2,7 @@
 
 > 一句话描述需求 → 六节点 Agent 工作流 → 产出可运行的前端代码 → 自动质检 → 定向修复 → 立刻可预览。
 
-**Java 21 · Spring Boot 3.5.4 · LangGraph4j 1.6.0-rc2 · Caffeine + Redis · Micrometer · 59 个单元测试**
+**Java 21 · Spring Boot 3.5.4 · LangGraph4j 1.6.0-rc2 · Caffeine + Redis · Micrometer · HITL · 64 个单元测试**
 
 这不是"调一次模型把代码吐出来"的 demo。生成之后的**质检与修复**才是这个项目的重心：
 产物要能被浏览器打开、能被 `node --check` 解析、不能有 XSS 和内网依赖，不达标就自动改，改不动就如实报告。
@@ -102,7 +102,8 @@ Invoke-RestMethod -Uri http://127.0.0.1:18080/api/generate -Method POST `
 | 单次生成延迟 | 平均 78ms（离线确定性生成器，不含真实模型耗时） |
 | 可观测性 | `/actuator/prometheus` 暴露 `studio_*` 业务指标 + JVM/HTTP 内置指标，Grafana 可直接抓 |
 | 生成历史 | JSONL 落盘（`var/runs/runs.jsonl`），`/api/runs` 可倒序查最近 N 条，重启后回放 |
-| 单元测试 | **59 个，全绿** |
+| 发布确认（HITL） | `require-approval=true` 时质检通过后停在发布前：不落盘、无预览地址，`approve` 才发布、`reject` 丢弃 |
+| 单元测试 | **64 个，全绿** |
 
 ---
 
@@ -159,6 +160,20 @@ Prometheus 侧目前暴露 `studio_generations_total`、`studio_cache_hits_total
 
 代价是没有索引和事务，适合"看历史/复盘"，不适合当业务主库 —— 真要换 JDBC，只需另写一个
 `RunRepository` 实现。
+
+### 为什么发布前要加人工确认
+
+生成的是**会内联脚本的网页**，直接发布等于把一个可能有问题的页面挂出去。机器质检拦得住已知模式
+（XSS 写法、外链、标签不闭合），但"这个页面到底能不能给人看"是人的判断 —— 所以这一层不该省。
+
+行为（`studio.require-approval=true`）：
+
+1. 工作流跑到质检通过就停住，产物只留在内存，**不写盘、不给预览地址**
+2. `GET /api/approvals` 列出待确认项
+3. `POST /api/runs/{id}/approve` 才落盘并返回预览地址；`reject` 直接丢弃
+4. 历史里的状态用"追加同 runId 的记录"表达（pending → published/rejected），文件仍是 append-only
+
+实测：pending 时目录不存在、previewUrl 为空；approve 后目录出现、预览 200；reject 后目录始终不存在。
 
 ## 五、三次"交学费"的记录
 

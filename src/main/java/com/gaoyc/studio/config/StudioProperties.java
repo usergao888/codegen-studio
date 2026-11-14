@@ -14,7 +14,8 @@ public record StudioProperties(
         int maxRepairRounds,
         RateLimit rateLimit,
         Models models,
-        Redis redis
+        Redis redis,
+        boolean requireApproval
 ) {
 
     public StudioProperties {

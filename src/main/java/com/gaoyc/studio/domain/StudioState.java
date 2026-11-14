@@ -18,6 +18,7 @@ public class StudioState extends AgentState {
     public static final String INITIAL_ISSUES = "initialIssues";
     public static final String ROUNDS = "rounds";
     public static final String STAGES = "stages";
+    public static final String AWAITING_APPROVAL = "awaitingApproval";
     public static final String MODEL = "model";
     public static final String TIER = "tier";
 
@@ -78,6 +79,11 @@ public class StudioState extends AgentState {
     public int rounds() {
         Object value = data().get(ROUNDS);
         return value instanceof Integer i ? i : 0;
+    }
+
+    public boolean awaitingApproval() {
+        Object value = data().get(AWAITING_APPROVAL);
+        return value instanceof Boolean flag && flag;
     }
 
     public boolean hasBlockingIssues() {
