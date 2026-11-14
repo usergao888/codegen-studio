@@ -45,6 +45,14 @@ studio:
     small: deepseek-chat
     strong: deepseek-reasoner
     complex-prompt-chars: 120
+  # 真实模型接入（OpenAI 兼容端点）。enabled=true 但没配 key 时自动退回模板生成
+  llm:
+    enabled: false
+    base-url: https://api.deepseek.com/v1
+    api-key: ""
+    model: deepseek-chat
+    timeout-seconds: 60
+    max-output-chars: 60000
   # 二级缓存后端：true 时连 Redis 做跨进程共享；连不上会自动回退到进程内实现
   redis:
     enabled: true

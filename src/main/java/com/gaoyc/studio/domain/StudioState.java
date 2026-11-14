@@ -19,6 +19,7 @@ public class StudioState extends AgentState {
     public static final String ROUNDS = "rounds";
     public static final String STAGES = "stages";
     public static final String AWAITING_APPROVAL = "awaitingApproval";
+    public static final String GENERATOR = "generator";
     public static final String MODEL = "model";
     public static final String TIER = "tier";
 
@@ -79,6 +80,10 @@ public class StudioState extends AgentState {
     public int rounds() {
         Object value = data().get(ROUNDS);
         return value instanceof Integer i ? i : 0;
+    }
+
+    public String generator() {
+        return String.valueOf(data().getOrDefault(GENERATOR, "template"));
     }
 
     public boolean awaitingApproval() {

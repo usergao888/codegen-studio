@@ -146,6 +146,7 @@ public class GenerationService {
         }
         metrics.recordGeneration(elapsed, cost);
         metrics.recordRepairs(finalState.rounds());
+        metrics.recordBackend(finalState.generator());
         // 记录首轮被质检拦下的缺陷码 —— 修好了不代表没发生过，这才是调参该看的信号
         metrics.recordIssueCodes(result.initialIssues().stream().map(QaIssue::code).toList());
         if (!result.passed()) {

@@ -105,6 +105,15 @@ public class StudioMetrics {
         failureCounter.increment();
     }
 
+    /** 记录本次产物由哪个后端产出（template / llm:xxx），用于两种方案的效果对比。 */
+    public void recordBackend(String backend) {
+        Counter.builder("studio.generation.backend")
+                .description("产物生成后端使用次数")
+                .tag("backend", backend == null ? "unknown" : backend)
+                .register(registry)
+                .increment();
+    }
+
     public void recordIssueCodes(Iterable<String> codes) {
         for (String code : codes) {
             issueCodes.computeIfAbsent(code, ignored -> new LongAdder()).increment();

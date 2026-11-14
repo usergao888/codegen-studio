@@ -23,7 +23,7 @@ import com.gaoyc.studio.domain.AppSpec;
 import com.gaoyc.studio.domain.QaIssue;
 import com.gaoyc.studio.domain.SiteDraft;
 import com.gaoyc.studio.domain.StudioState;
-import com.gaoyc.studio.gen.SiteGenerator;
+import com.gaoyc.studio.gen.SiteWriter;
 import com.gaoyc.studio.llm.ModelRouter;
 import com.gaoyc.studio.publish.SitePublisher;
 import com.gaoyc.studio.qa.QaGate;
@@ -56,7 +56,7 @@ public class GenerationGraph {
     }
 
     private final SpecParser specParser;
-    private final SiteGenerator generator;
+    private final SiteWriter writer;
     private final QaGate qaGate;
     private final Repairer repairer;
     private final ModelRouter router;
@@ -65,14 +65,14 @@ public class GenerationGraph {
     private final CompiledGraph<StudioState> compiled;
 
     public GenerationGraph(SpecParser specParser,
-                           SiteGenerator generator,
+                           SiteWriter writer,
                            QaGate qaGate,
                            Repairer repairer,
                            ModelRouter router,
                            SitePublisher publisher,
                            StudioProperties properties) throws GraphStateException {
         this.specParser = specParser;
-        this.generator = generator;
+        this.writer = writer;
         this.qaGate = qaGate;
         this.repairer = repairer;
         this.router = router;
@@ -161,9 +161,11 @@ public class GenerationGraph {
     }
 
     private Map<String, Object> generateNode(StudioState state) {
-        SiteDraft draft = generator.generate(state.spec());
+        // 具体走模板还是大模型由 SiteWriter 决定；失败会自动回退模板
+        SiteDraft draft = writer.write(state.spec(), state.prompt());
         return Map.of(
                 StudioState.DRAFT, draft,
+                StudioState.GENERATOR, writer.backend(),
                 StudioState.STAGES, List.of(NODE_GENERATE));
     }
 

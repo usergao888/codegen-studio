@@ -2,7 +2,7 @@
 
 > 一句话描述需求 → 六节点 Agent 工作流 → 产出可运行的前端代码 → 自动质检 → 定向修复 → 立刻可预览。
 
-**Java 21 · Spring Boot 3.5.4 · LangGraph4j 1.6.0-rc2 · Caffeine + Redis · Micrometer · HITL · 64 个单元测试**
+**Java 21 · Spring Boot 3.5.4 · LangGraph4j 1.6.0-rc2 · Caffeine + Redis · Micrometer · HITL · 可接真实模型 · 71 个单元测试**
 
 这不是"调一次模型把代码吐出来"的 demo。生成之后的**质检与修复**才是这个项目的重心：
 产物要能被浏览器打开、能被 `node --check` 解析、不能有 XSS 和内网依赖，不达标就自动改，改不动就如实报告。
@@ -103,7 +103,8 @@ Invoke-RestMethod -Uri http://127.0.0.1:18080/api/generate -Method POST `
 | 可观测性 | `/actuator/prometheus` 暴露 `studio_*` 业务指标 + JVM/HTTP 内置指标，Grafana 可直接抓 |
 | 生成历史 | JSONL 落盘（`var/runs/runs.jsonl`），`/api/runs` 可倒序查最近 N 条，重启后回放 |
 | 发布确认（HITL） | `require-approval=true` 时质检通过后停在发布前：不落盘、无预览地址，`approve` 才发布、`reject` 丢弃 |
-| 单元测试 | **64 个，全绿** |
+| 真实模型 | `studio.llm.enabled=true` 时走 OpenAI 兼容端点（DeepSeek/Qwen/vLLM/Ollama）；失败自动回退模板 |
+| 单元测试 | **71 个，全绿** |
 
 ---
 
@@ -174,6 +175,23 @@ Prometheus 侧目前暴露 `studio_generations_total`、`studio_cache_hits_total
 4. 历史里的状态用"追加同 runId 的记录"表达（pending → published/rejected），文件仍是 append-only
 
 实测：pending 时目录不存在、previewUrl 为空；approve 后目录出现、预览 200；reject 后目录始终不存在。
+
+### 真实模型接入：为什么不用 LangChain4j
+
+这里只需要"发一次请求、拿一段文本"，引一整套框架换来的是传递依赖和版本地狱。所以直接用 JDK 自带的
+`HttpClient`（零新增依赖），把复杂度放在真正难的地方 —— **输出校验与回退**：
+
+1. 只让模型返回 `{"files":[{"path","content"}]}`，禁止自由文本，否则解析就是赌博；
+2. 路径消毒：`../`、绝对路径一律丢弃（模型真的会给出这种路径）；
+3. 任何异常（超时/限流/非 2xx/非法 JSON）都回退模板生成，用户永远拿得到能用的页面；
+4. 产出的后端名打点到 `studio_generation_backend_total{backend="llm:xxx"}`，两种方案可对比。
+
+**没有 API Key 也能验证这条链路**：`scripts/stub-openai.py` 是一个本地 OpenAI 兼容桩服务，
+返回固定文件树，起它然后把 `studio.llm.base-url` 指过去即可。实测产物里带桩标记、
+预览 200、指标里出现 `backend="llm:stub-model"`。
+
+> 诚实边界：这里验证的是"调用、解析、消毒、回退"四件事，**没有验证真实模型（DeepSeek/Qwen）的产物质量** ——
+> 那需要 API Key 和预算，属于你拿到 key 后的下一步。
 
 ## 五、三次"交学费"的记录
 
