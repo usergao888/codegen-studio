@@ -43,3 +43,16 @@ studio:
     port: 6379
     database: 0
     key-prefix: "studio:gen:"
+
+# 暴露 Prometheus 抓取端点：/actuator/prometheus
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: codegen-studio

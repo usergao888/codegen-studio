@@ -2,7 +2,7 @@
 
 > 一句话描述需求 → 六节点 Agent 工作流 → 产出可运行的前端代码 → 自动质检 → 定向修复 → 立刻可预览。
 
-**Java 21 · Spring Boot 3.5.4 · LangGraph4j 1.6.0-rc2 · Caffeine + Redis · 54 个单元测试**
+**Java 21 · Spring Boot 3.5.4 · LangGraph4j 1.6.0-rc2 · Caffeine + Redis · Micrometer · 54 个单元测试**
 
 这不是"调一次模型把代码吐出来"的 demo。生成之后的**质检与修复**才是这个项目的重心：
 产物要能被浏览器打开、能被 `node --check` 解析、不能有 XSS 和内网依赖，不达标就自动改，改不动就如实报告。
@@ -100,6 +100,7 @@ Invoke-RestMethod -Uri http://127.0.0.1:18080/api/generate -Method POST `
 | 限流 | 同一用户 25 次连打：18 次 200 + **7 次 429**；Redis 里可见 user/ip/endpoint 三级桶 |
 | 缓存 | 同一需求二次请求命中 L1，`cached=true`，耗时从 ~140ms 降到 <1ms |
 | 单次生成延迟 | 平均 78ms（离线确定性生成器，不含真实模型耗时） |
+| 可观测性 | `/actuator/prometheus` 暴露 `studio_*` 业务指标 + JVM/HTTP 内置指标，Grafana 可直接抓 |
 
 ---
 
@@ -136,6 +137,16 @@ studio:
 判断必须原子：如果拆成 GET → 算 → SET 三次往返，两个并发请求会读到同一份 tokens 再各自扣减，
 限流器自己就被击穿了。这里用一段 Lua 做"读桶 → 回补 → 扣减 → 写回"，
 Redis 里存的是 `studio:rl:<级别>:<取值>` 的 hash（`tokens` + `ts`），闲置 2 分钟自动回收。
+
+### 可观测性：两套指标，各管一件事
+
+- `/api/metrics`：给人看的业务快照（生成数、命中率、缺陷码分布、成本），字段随业务改
+- `/actuator/prometheus`：给监控系统抓的（Micrometer 打点），指标名与 tag 保持稳定
+
+硬合成一套的结果是两边都不好用 —— 业务字段经常变，而监控指标名一改整套看板就废了。
+Prometheus 侧目前暴露 `studio_generations_total`、`studio_cache_hits_total`、
+`studio_rate_limited_total`、`studio_generation_latency_milliseconds`、
+`studio_qa_issues_total{code=...}` 等；Grafana 侧只需把这个端点加为数据源，本仓库不代管 Grafana。
 
 ## 五、三次"交学费"的记录
 

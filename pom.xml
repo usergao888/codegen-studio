@@ -53,6 +53,23 @@
             <artifactId>lettuce-core</artifactId>
         </dependency>
 
+        <!-- 可观测性：/actuator/prometheus 供 Grafana 抓取 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+        <!-- micrometer 不会传递这个 jar，缺了会在启动时报 NoClassDefFoundError: ExpositionFormats；
+             本地仓库只有 1.3.10 有 jar，因此显式锁定版本 -->
+        <dependency>
+            <groupId>io.prometheus</groupId>
+            <artifactId>prometheus-metrics-exposition-formats</artifactId>
+            <version>1.3.10</version>
+        </dependency>
+
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
