@@ -25,3 +25,10 @@ studio:
     small: deepseek-chat
     strong: deepseek-reasoner
     complex-prompt-chars: 120
+  # 二级缓存后端：true 时连 Redis 做跨进程共享；连不上会自动回退到进程内实现
+  redis:
+    enabled: true
+    host: 127.0.0.1
+    port: 6379
+    database: 0
+    key-prefix: "studio:gen:"

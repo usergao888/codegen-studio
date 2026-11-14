@@ -2,7 +2,7 @@
 
 > 一句话描述需求 → 六节点 Agent 工作流 → 产出可运行的前端代码 → 自动质检 → 定向修复 → 立刻可预览。
 
-**Java 21 · Spring Boot 3.5.4 · LangGraph4j 1.6.0-rc2 · Caffeine · 45 个单元测试**
+**Java 21 · Spring Boot 3.5.4 · LangGraph4j 1.6.0-rc2 · Caffeine + Redis · 50 个单元测试**
 
 这不是"调一次模型把代码吐出来"的 demo。生成之后的**质检与修复**才是这个项目的重心：
 产物要能被浏览器打开、能被 `node --check` 解析、不能有 XSS 和内网依赖，不达标就自动改，改不动就如实报告。
@@ -94,12 +94,37 @@ Invoke-RestMethod -Uri http://127.0.0.1:18080/api/generate -Method POST `
 | 项目 | 数值 |
 | --- | --- |
 | 支持的应用形态 | 6 种（待办 / 看板 / 落地页 / 表单 / 价格页 / 博客） |
-| 单元测试 | **45 个，全绿** |
+| 单元测试 | **50 个，全绿** |
 | 三类注入缺陷 | 全部被检出，**1 轮修复后通过**（首轮拦截率 3/3） |
 | 产物可执行性 | 4 个生成站点全部通过 `node --check` |
 | 限流 | 同一用户 25 次连打：17 次 200 + **8 次 429**（burst=10, 5/s） |
 | 缓存 | 同一需求二次请求命中 L1，`cached=true`，耗时从 ~140ms 降到 <1ms |
 | 单次生成延迟 | 平均 78ms（离线确定性生成器，不含真实模型耗时） |
+
+---
+
+### 两级缓存为什么默认是内存、而不是直接写死 Redis
+
+缓存是加速手段，不是可用性前提。所以 L2 被抽成 `L2Store` 接口：
+
+- `InMemoryL2`（默认）：单机够用，没有外部依赖
+- `RedisL2`：`studio.redis.enabled=true` 时启用，多实例共享
+- **连不上就回退**：启动时 ping 一次，失败则记 WARN 并退回内存实现，服务照常可用
+
+实测（本机 Redis 3.0.504）：写入 key `studio:gen:<规范化需求>`、TTL 1800s；
+**杀掉进程重启后再请求同一需求，`cached=true` 且 `l2Hits=1`、`l1Hits=0`** ——
+说明命中的确实是 Redis，而不是残留的进程内缓存。
+
+```yaml
+studio:
+  cache-ttl-seconds: 1800
+  redis:
+    enabled: true        # 关掉就退回内存实现
+    host: 127.0.0.1
+    port: 6379
+    database: 0
+    key-prefix: "studio:gen:"
+```
 
 ---
 
@@ -153,3 +178,4 @@ codegen-studio/
   `maven-surefire-plugin` 的完整依赖链，所以 `mvn test` 跑不了，改用 `TestMain` 反射运行；
   换到有网的机器上，`mvn test` 能直接跑同一批用例。
 - 未做：生成结果的像素级回归对比、多文件项目（Vue3 SFC）生成、真实模型的流式 token 透传。
+- 未做：Redisson 分布式限流 —— 限流仍是进程内令牌桶，多实例部署需要换成 Redis 版本。

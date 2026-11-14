@@ -93,7 +93,8 @@ public class StudioController {
     public Map<String, Object> metrics() {
         return Map.of(
                 "generation", metrics.snapshot(),
-                "cache", service.cache().stats());
+                "cache", service.cache().stats(),
+                "cacheBackend", service.cache().l2Backend());
     }
 
     private void sendError(SseEmitter emitter, String code, String message, long retryAfter) {

@@ -20,6 +20,8 @@
     <properties>
         <java.version>21</java.version>
         <langgraph4j.version>1.6.0-rc2</langgraph4j.version>
+        <!-- Spring Boot 3.5.4 默认管理的是 lettuce 6.6.0，本地仓库只有 6.3/6.8，这里显式覆盖 -->
+        <lettuce.version>6.8.2.RELEASE</lettuce.version>
     </properties>
 
     <dependencies>
@@ -39,6 +41,16 @@
         <dependency>
             <groupId>com.github.ben-manes.caffeine</groupId>
             <artifactId>caffeine</artifactId>
+        </dependency>
+
+        <!-- 两级缓存的 L2：Redis（版本由 Spring Boot 统一管理，本地仓库已就绪） -->
+        <dependency>
+            <groupId>org.springframework.data</groupId>
+            <artifactId>spring-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.lettuce</groupId>
+            <artifactId>lettuce-core</artifactId>
         </dependency>
 
         <dependency>

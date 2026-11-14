@@ -22,6 +22,7 @@ public final class TestMain {
             com.gaoyc.studio.qa.QaGateTest.class,
             com.gaoyc.studio.repair.RepairerTest.class,
             com.gaoyc.studio.cache.TwoLevelCacheTest.class,
+            com.gaoyc.studio.cache.InMemoryL2Test.class,
             com.gaoyc.studio.limit.TokenBucketRateLimiterTest.class,
             com.gaoyc.studio.llm.ModelRouterTest.class
     );

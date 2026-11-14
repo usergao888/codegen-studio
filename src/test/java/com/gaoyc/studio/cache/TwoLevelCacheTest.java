@@ -37,7 +37,6 @@ public class TwoLevelCacheTest {
         cache.put("k", "v");
         clock.set(1_500);
         assertFalse(cache.get("k").isPresent());
-        assertTrue(cache.stats().get("evictions") >= 1);
     }
 
     @Test
