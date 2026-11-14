@@ -20,6 +20,17 @@ studio:
   rate-limit:
     permits-per-second: 5
     burst: 10
+    # 三级限流：任一级超限即拒绝；不写 levels 则按上面两个值自动派生
+    levels:
+      user:
+        permits-per-second: 5
+        burst: 10
+      ip:
+        permits-per-second: 20
+        burst: 40
+      endpoint:
+        permits-per-second: 50
+        burst: 100
   # 多模型路由的档位（离线时用 deterministic 桩）
   models:
     small: deepseek-chat

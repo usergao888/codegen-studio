@@ -5,16 +5,15 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.LongSupplier;
 
 /**
- * 令牌桶限流：按 userId 维度独立计量，允许突发到 burst，之后按 permitsPerSecond 匀速恢复。
+ * 进程内令牌桶：按 key 独立计量，允许突发到 burst，之后按 permitsPerSecond 匀速恢复。
  *
- * <p>选令牌桶而不是固定窗口计数，是因为生成一次要几秒钟，用户往往会连点几次 ——
- * 令牌桶能把"突发"和"长期速率"分开控制。真实部署换 Redisson 的 {@code RRateLimiter}，
- * tryAcquire 的语义保持一致。
+ * <p>单机默认用它。注意它**不跨进程** —— 多实例部署时每个实例各算各的，
+ * 实际放行量会变成 N 倍，所以那种场景要换 {@link RedisRateLimiter}。
  */
-public class TokenBucketRateLimiter {
+public class TokenBucketRateLimiter implements RateLimiter {
 
-    private final double permitsPerSecond;
-    private final int burst;
+    private final double defaultPermitsPerSecond;
+    private final int defaultBurst;
     private final LongSupplier nanoClock;
     private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
 
@@ -36,21 +35,27 @@ public class TokenBucketRateLimiter {
     }
 
     public TokenBucketRateLimiter(int permitsPerSecond, int burst, LongSupplier nanoClock) {
-        this.permitsPerSecond = Math.max(0.1, permitsPerSecond);
-        this.burst = Math.max(1, burst);
+        this.defaultPermitsPerSecond = Math.max(0.1, permitsPerSecond);
+        this.defaultBurst = Math.max(1, burst);
         this.nanoClock = nanoClock;
     }
 
     public Decision tryAcquire(String key) {
-        return tryAcquire(key, 1);
+        return tryAcquireDetailed(key, 1, defaultPermitsPerSecond, defaultBurst);
     }
 
     public Decision tryAcquire(String key, int permits) {
+        return tryAcquireDetailed(key, permits, defaultPermitsPerSecond, defaultBurst);
+    }
+
+    /** 可指定速率与桶容量，供多级限流复用同一个实例。 */
+    public Decision tryAcquireDetailed(String key, int permits, double permitsPerSecond, int burst) {
+        int capacity = Math.max(1, burst);
         long now = nanoClock.getAsLong();
-        Bucket bucket = buckets.computeIfAbsent(key, ignored -> new Bucket(burst, now));
+        Bucket bucket = buckets.computeIfAbsent(key, ignored -> new Bucket(capacity, now));
         synchronized (bucket) {
             double elapsedSeconds = (now - bucket.lastRefillNanos) / 1_000_000_000.0;
-            bucket.tokens = Math.min(burst, bucket.tokens + elapsedSeconds * permitsPerSecond);
+            bucket.tokens = Math.min(capacity, bucket.tokens + elapsedSeconds * permitsPerSecond);
             bucket.lastRefillNanos = now;
 
             if (bucket.tokens >= permits) {
@@ -61,6 +66,19 @@ public class TokenBucketRateLimiter {
             long retryAfter = (long) Math.ceil(missing / permitsPerSecond * 1000.0);
             return new Decision(false, Math.max(1, retryAfter), bucket.tokens);
         }
+    }
+
+    @Override
+    public RateLimiter.Decision tryAcquire(String key, int permits, double permitsPerSecond, int burst) {
+        Decision detailed = tryAcquireDetailed(key, permits, permitsPerSecond, burst);
+        return detailed.allowed()
+                ? RateLimiter.Decision.allow()
+                : RateLimiter.Decision.deny(detailed.retryAfterMillis());
+    }
+
+    @Override
+    public String backend() {
+        return "memory";
     }
 
     /** 清掉长时间不活跃的桶，避免 key 无限增长。 */
@@ -75,10 +93,10 @@ public class TokenBucketRateLimiter {
                     continue;
                 }
                 // 先按流逝时间回补再判断是否已满：不回补的话 tokens 还是"刚被借走"的旧值，
-                // 空闲很久的桶永远不满足删除条件（这个 bug 是测试抓出来的）。
+                // 空闲很久的桶永远不满足删除条件（这个 bug 是测试抓出来的）
                 double elapsedSeconds = (now - bucket.lastRefillNanos) / 1_000_000_000.0;
-                double refilled = Math.min(burst, bucket.tokens + elapsedSeconds * permitsPerSecond);
-                if (refilled >= burst - 0.001) {
+                double refilled = Math.min(defaultBurst, bucket.tokens + elapsedSeconds * defaultPermitsPerSecond);
+                if (refilled >= defaultBurst - 0.001) {
                     buckets.remove(entry.getKey());
                     removed++;
                 }

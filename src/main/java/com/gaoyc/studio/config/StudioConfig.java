@@ -1,5 +1,8 @@
 package com.gaoyc.studio.config;
 
+import java.util.List;
+import java.util.Map;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
@@ -11,6 +14,9 @@ import com.gaoyc.studio.cache.L2Store;
 import com.gaoyc.studio.cache.RedisL2;
 import com.gaoyc.studio.cache.TwoLevelCache;
 import com.gaoyc.studio.domain.GenerationResult;
+import com.gaoyc.studio.limit.MultiLevelRateLimiter;
+import com.gaoyc.studio.limit.RateLimiter;
+import com.gaoyc.studio.limit.RedisRateLimiter;
 import com.gaoyc.studio.limit.TokenBucketRateLimiter;
 
 @Configuration
@@ -62,10 +68,40 @@ public class StudioConfig {
                 l2Store);
     }
 
+    /** 限流后端：同样优先 Redis（多实例共享），不可用时退回进程内令牌桶。 */
     @Bean
-    public TokenBucketRateLimiter rateLimiter(StudioProperties properties) {
-        return new TokenBucketRateLimiter(
-                properties.rateLimit().permitsPerSecond(),
-                properties.rateLimit().burst());
+    public RateLimiter rateLimiterBackend(StudioProperties properties) {
+        StudioProperties.Redis redis = properties.redis();
+        StudioProperties.RateLimit rateLimit = properties.rateLimit();
+        if (redis.enabled()) {
+            RedisRateLimiter redisLimiter = null;
+            try {
+                redisLimiter = new RedisRateLimiter(redis.host(), redis.port(), redis.database());
+                if (redisLimiter.ping()) {
+                    log.info("限流后端已接入 Redis（多实例共享额度）");
+                    return redisLimiter;
+                }
+            } catch (Exception e) {
+                log.warn("Redis 限流器不可用（{}:{}）：{}", redis.host(), redis.port(), e.getMessage());
+            }
+            if (redisLimiter != null) {
+                redisLimiter.close();
+            }
+            log.warn("限流已回退为进程内令牌桶；多实例部署时额度不共享");
+        }
+        return new TokenBucketRateLimiter(rateLimit.permitsPerSecond(), rateLimit.burst());
+    }
+
+    @Bean
+    public MultiLevelRateLimiter multiLevelRateLimiter(
+            StudioProperties properties, RateLimiter rateLimiterBackend) {
+        Map<String, StudioProperties.RateLimit.Level> configured = properties.rateLimit().levels();
+        List<MultiLevelRateLimiter.Level> levels = configured.entrySet().stream()
+                .map(entry -> new MultiLevelRateLimiter.Level(
+                        entry.getKey(),
+                        entry.getValue().permitsPerSecond(),
+                        entry.getValue().burst()))
+                .toList();
+        return new MultiLevelRateLimiter(rateLimiterBackend, levels);
     }
 }

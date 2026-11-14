@@ -38,12 +38,14 @@ public class StudioController {
 
     @PostMapping(path = "/generate", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> generate(@RequestBody(required = false) GenerateRequest request,
-                                      @RequestHeader(value = "X-User-Id", required = false) String headerUser) {
+                                      @RequestHeader(value = "X-User-Id", required = false) String headerUser,
+                                      jakarta.servlet.http.HttpServletRequest httpRequest) {
         if (request == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "请求体不能为空"));
         }
         try {
-            GenerationResult result = service.generate(request.prompt(), resolveUser(request, headerUser));
+            GenerationResult result = service.generate(request.prompt(), resolveUser(request, headerUser),
+                    clientIp(httpRequest));
             return ResponseEntity.ok(result);
         } catch (GenerationService.InvalidPromptException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -58,13 +60,15 @@ public class StudioController {
     @GetMapping(path = "/generate/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter stream(@RequestParam("prompt") String prompt,
                              @RequestParam(value = "userId", required = false) String userId,
-                             @RequestHeader(value = "X-User-Id", required = false) String headerUser) {
+                             @RequestHeader(value = "X-User-Id", required = false) String headerUser,
+                             jakarta.servlet.http.HttpServletRequest httpRequest) {
         SseEmitter emitter = new SseEmitter(120_000L);
         String user = userId != null && !userId.isBlank() ? userId : (headerUser == null ? "anonymous" : headerUser);
+        String ip = clientIp(httpRequest);
 
         CompletableFuture.runAsync(() -> {
             try {
-                GenerationResult result = service.generate(prompt, user, event -> {
+                GenerationResult result = service.generate(prompt, user, ip, event -> {
                     try {
                         emitter.send(SseEmitter.event().name("node").data(event));
                     } catch (IOException ignored) {
@@ -94,7 +98,10 @@ public class StudioController {
         return Map.of(
                 "generation", metrics.snapshot(),
                 "cache", service.cache().stats(),
-                "cacheBackend", service.cache().l2Backend());
+                "cacheBackend", service.cache().l2Backend(),
+                "rateLimiterBackend", service.rateLimiter().backend(),
+                "rateLimitLevels", service.rateLimiter().levels().stream()
+                        .map(l -> l.scope() + ":" + l.permitsPerSecond() + "/s").toList());
     }
 
     private void sendError(SseEmitter emitter, String code, String message, long retryAfter) {
@@ -104,6 +111,17 @@ public class StudioController {
         } catch (IOException ignored) {
             // 连接已断，无需处理
         }
+    }
+
+    private String clientIp(jakarta.servlet.http.HttpServletRequest request) {
+        if (request == null) {
+            return "unknown";
+        }
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            return forwarded.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 
     private String resolveUser(GenerateRequest request, String headerUser) {

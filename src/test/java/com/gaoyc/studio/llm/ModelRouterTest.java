@@ -11,7 +11,7 @@ public class ModelRouterTest {
 
     private final ModelRouter router = new ModelRouter(new StudioProperties(
             "./var/sites", 1800, 256, 2,
-            new StudioProperties.RateLimit(5, 10),
+            StudioProperties.RateLimit.standard(5, 10),
             new StudioProperties.Models("deepseek-chat", "deepseek-reasoner", 120),
             new StudioProperties.Redis(false, "127.0.0.1", 6379, 0, "test:")));
 

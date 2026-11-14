@@ -2,6 +2,7 @@ package com.gaoyc.studio.service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -16,7 +17,7 @@ import com.gaoyc.studio.domain.QaIssue;
 import com.gaoyc.studio.domain.SiteDraft;
 import com.gaoyc.studio.domain.StudioState;
 import com.gaoyc.studio.graph.GenerationGraph;
-import com.gaoyc.studio.limit.TokenBucketRateLimiter;
+import com.gaoyc.studio.limit.MultiLevelRateLimiter;
 import com.gaoyc.studio.llm.ModelRouter;
 import com.gaoyc.studio.metrics.StudioMetrics;
 
@@ -38,14 +39,14 @@ public class GenerationService {
 
     private final GenerationGraph graph;
     private final TwoLevelCache<String, GenerationResult> cache;
-    private final TokenBucketRateLimiter rateLimiter;
+    private final MultiLevelRateLimiter rateLimiter;
     private final ModelRouter router;
     private final StudioMetrics metrics;
     private final StudioProperties properties;
 
     public GenerationService(GenerationGraph graph,
                              TwoLevelCache<String, GenerationResult> cache,
-                             TokenBucketRateLimiter rateLimiter,
+                             MultiLevelRateLimiter rateLimiter,
                              ModelRouter router,
                              StudioMetrics metrics,
                              StudioProperties properties) {
@@ -58,11 +59,17 @@ public class GenerationService {
     }
 
     public GenerationResult generate(String prompt, String userId) {
-        return generate(prompt, userId, event -> {
+        return generate(prompt, userId, "unknown", event -> {
         });
     }
 
-    public GenerationResult generate(String prompt, String userId, Consumer<NodeEvent> listener) {
+    public GenerationResult generate(String prompt, String userId, String clientIp) {
+        return generate(prompt, userId, clientIp, event -> {
+        });
+    }
+
+    public GenerationResult generate(String prompt, String userId, String clientIp,
+                                     Consumer<NodeEvent> listener) {
         String normalized = normalize(prompt);
         if (normalized.isEmpty()) {
             throw new InvalidPromptException("需求不能为空");
@@ -78,7 +85,11 @@ public class GenerationService {
             return cached.get().asCached();
         }
 
-        TokenBucketRateLimiter.Decision decision = rateLimiter.tryAcquire(userId == null ? "anonymous" : userId);
+        // 三级同判：用户 / IP / 接口，任意一级超限即拒绝
+        MultiLevelRateLimiter.Decision decision = rateLimiter.tryAcquire(Map.of(
+                "user", userId == null || userId.isBlank() ? "anonymous" : userId,
+                "ip", clientIp == null || clientIp.isBlank() ? "unknown" : clientIp,
+                "endpoint", "generate"));
         if (!decision.allowed()) {
             metrics.recordRateLimited();
             throw new RateLimitExceededException(decision.retryAfterMillis());
@@ -129,6 +140,10 @@ public class GenerationService {
 
     public TwoLevelCache<String, GenerationResult> cache() {
         return cache;
+    }
+
+    public MultiLevelRateLimiter rateLimiter() {
+        return rateLimiter;
     }
 
     public StudioProperties properties() {

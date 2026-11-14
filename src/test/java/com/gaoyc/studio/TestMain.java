@@ -24,6 +24,7 @@ public final class TestMain {
             com.gaoyc.studio.cache.TwoLevelCacheTest.class,
             com.gaoyc.studio.cache.InMemoryL2Test.class,
             com.gaoyc.studio.limit.TokenBucketRateLimiterTest.class,
+            com.gaoyc.studio.limit.MultiLevelRateLimiterTest.class,
             com.gaoyc.studio.llm.ModelRouterTest.class
     );
 
