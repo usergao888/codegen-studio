@@ -19,7 +19,9 @@ import com.gaoyc.studio.domain.StudioState;
 import com.gaoyc.studio.graph.GenerationGraph;
 import com.gaoyc.studio.limit.MultiLevelRateLimiter;
 import com.gaoyc.studio.llm.ModelRouter;
+import com.gaoyc.studio.domain.RunRecord;
 import com.gaoyc.studio.metrics.StudioMetrics;
+import com.gaoyc.studio.repository.RunRepository;
 
 /**
  * 把限流、缓存、工作流、指标串成一个用例。
@@ -42,6 +44,7 @@ public class GenerationService {
     private final MultiLevelRateLimiter rateLimiter;
     private final ModelRouter router;
     private final StudioMetrics metrics;
+    private final RunRepository runRepository;
     private final StudioProperties properties;
 
     public GenerationService(GenerationGraph graph,
@@ -49,12 +52,14 @@ public class GenerationService {
                              MultiLevelRateLimiter rateLimiter,
                              ModelRouter router,
                              StudioMetrics metrics,
+                             RunRepository runRepository,
                              StudioProperties properties) {
         this.graph = graph;
         this.cache = cache;
         this.rateLimiter = rateLimiter;
         this.router = router;
         this.metrics = metrics;
+        this.runRepository = runRepository;
         this.properties = properties;
     }
 
@@ -135,6 +140,7 @@ public class GenerationService {
         if (!result.passed()) {
             metrics.recordQaBlocked();
         }
+        runRepository.save(RunRecord.of(result, normalized));
         return result;
     }
 

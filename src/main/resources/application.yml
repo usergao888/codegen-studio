@@ -1,5 +1,12 @@
 server:
   port: 18080
+  # 显式声明响应编码：JSON 规范默认 UTF-8，但 PowerShell 5.1 这类客户端
+  # 不看规范只看 Content-Type，缺 charset 就会把中文解成乱码
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
 
 spring:
   application:

@@ -2,7 +2,7 @@
 
 > 一句话描述需求 → 六节点 Agent 工作流 → 产出可运行的前端代码 → 自动质检 → 定向修复 → 立刻可预览。
 
-**Java 21 · Spring Boot 3.5.4 · LangGraph4j 1.6.0-rc2 · Caffeine + Redis · Micrometer · 54 个单元测试**
+**Java 21 · Spring Boot 3.5.4 · LangGraph4j 1.6.0-rc2 · Caffeine + Redis · Micrometer · 59 个单元测试**
 
 这不是"调一次模型把代码吐出来"的 demo。生成之后的**质检与修复**才是这个项目的重心：
 产物要能被浏览器打开、能被 `node --check` 解析、不能有 XSS 和内网依赖，不达标就自动改，改不动就如实报告。
@@ -101,6 +101,8 @@ Invoke-RestMethod -Uri http://127.0.0.1:18080/api/generate -Method POST `
 | 缓存 | 同一需求二次请求命中 L1，`cached=true`，耗时从 ~140ms 降到 <1ms |
 | 单次生成延迟 | 平均 78ms（离线确定性生成器，不含真实模型耗时） |
 | 可观测性 | `/actuator/prometheus` 暴露 `studio_*` 业务指标 + JVM/HTTP 内置指标，Grafana 可直接抓 |
+| 生成历史 | JSONL 落盘（`var/runs/runs.jsonl`），`/api/runs` 可倒序查最近 N 条，重启后回放 |
+| 单元测试 | **59 个，全绿** |
 
 ---
 
@@ -147,6 +149,16 @@ Redis 里存的是 `studio:rl:<级别>:<取值>` 的 hash（`tokens` + `ts`）�
 Prometheus 侧目前暴露 `studio_generations_total`、`studio_cache_hits_total`、
 `studio_rate_limited_total`、`studio_generation_latency_milliseconds`、
 `studio_qa_issues_total{code=...}` 等；Grafana 侧只需把这个端点加为数据源，本仓库不代管 Grafana。
+
+### 生成历史为什么用 JSONL 而不是数据库
+
+本地仓库里没有 H2/HSQLDB/SQLite 的 jar，为了几十条历史引 ORM 不划算。JSONL 的两个好处：
+
+- **按行追加天然容忍半行损坏**：进程被杀最多丢最后一行，不会整份文件读不出来
+- 启动时回放到内存索引，只保留最近 200 条，更早的留在文件里
+
+代价是没有索引和事务，适合"看历史/复盘"，不适合当业务主库 —— 真要换 JDBC，只需另写一个
+`RunRepository` 实现。
 
 ## 五、三次"交学费"的记录
 

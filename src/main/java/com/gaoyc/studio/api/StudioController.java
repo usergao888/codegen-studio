@@ -18,6 +18,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import com.gaoyc.studio.domain.GenerationResult;
 import com.gaoyc.studio.metrics.StudioMetrics;
+import com.gaoyc.studio.repository.RunRepository;
 import com.gaoyc.studio.service.GenerationService;
 
 /** 生成接口：一个同步 JSON，一个 SSE 流式。 */
@@ -27,10 +28,13 @@ public class StudioController {
 
     private final GenerationService service;
     private final StudioMetrics metrics;
+    private final RunRepository runRepository;
 
-    public StudioController(GenerationService service, StudioMetrics metrics) {
+    public StudioController(GenerationService service, StudioMetrics metrics,
+                            RunRepository runRepository) {
         this.service = service;
         this.metrics = metrics;
+        this.runRepository = runRepository;
     }
 
     public record GenerateRequest(String prompt, String userId) {
@@ -86,6 +90,23 @@ public class StudioController {
             }
         });
         return emitter;
+    }
+
+    /** 最近的生成历史，按时间倒序。 */
+    @GetMapping("/runs")
+    public Map<String, Object> runs(@RequestParam(value = "limit", defaultValue = "20") int limit) {
+        int safe = Math.max(1, Math.min(limit, 200));
+        return Map.of(
+                "count", runRepository.count(),
+                "items", runRepository.recent(safe));
+    }
+
+    /** 单个 run 的详情；产物本身在 /preview/{slug}/ 下。 */
+    @GetMapping("/runs/{runId}")
+    public ResponseEntity<?> run(@org.springframework.web.bind.annotation.PathVariable("runId") String runId) {
+        return runRepository.find(runId)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @GetMapping("/health")
