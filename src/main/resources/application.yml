@@ -1,0 +1,27 @@
+server:
+  port: 18080
+
+spring:
+  application:
+    name: codegen-studio
+  mvc:
+    async:
+      request-timeout: 120000
+
+studio:
+  # 生成产物落盘目录（预览站点从这里提供）
+  workspace: ./var/sites
+  # 同一需求缓存多久（秒）
+  cache-ttl-seconds: 1800
+  cache-max-entries: 256
+  # 质检失败后最多重生成几次
+  max-repair-rounds: 2
+  # 令牌桶：每个用户每秒补充多少个令牌、桶容量
+  rate-limit:
+    permits-per-second: 5
+    burst: 10
+  # 多模型路由的档位（离线时用 deterministic 桩）
+  models:
+    small: deepseek-chat
+    strong: deepseek-reasoner
+    complex-prompt-chars: 120

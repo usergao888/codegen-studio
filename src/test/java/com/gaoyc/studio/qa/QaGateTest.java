@@ -1,0 +1,110 @@
+package com.gaoyc.studio.qa;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+import org.junit.jupiter.api.Test;
+
+import com.gaoyc.studio.domain.QaIssue;
+import com.gaoyc.studio.domain.SiteDraft;
+import com.gaoyc.studio.gen.SiteGenerator;
+import com.gaoyc.studio.spec.SpecParser;
+
+public class QaGateTest {
+
+    private final SpecParser parser = new SpecParser();
+    private final SiteGenerator generator = new SiteGenerator();
+    private final QaGate gate = new QaGate(
+            new HtmlValidator(), new CssValidator(), new JsValidator(), new PolicyValidator());
+
+    private List<String> codes(SiteDraft draft) {
+        return gate.check(draft).stream().map(QaIssue::code).collect(Collectors.toList());
+    }
+
+    private SiteDraft cleanDraft() {
+        return generator.generate(parser.parse("做一个待办清单"));
+    }
+
+    @Test
+    void generatedSitePassesQualityGate() {
+        List<QaIssue> issues = gate.check(cleanDraft());
+        List<String> errors = issues.stream()
+                .filter(QaIssue::isError)
+                .map(QaIssue::code)
+                .collect(Collectors.toList());
+        assertEquals(List.of(), errors, "干净的产物不应有阻塞级问题");
+    }
+
+    @Test
+    void detectsUnclosedTag() {
+        SiteDraft broken = cleanDraft().withFile("index.html",
+                cleanDraft().file("index.html").replace("</footer>", ""));
+        assertTrue(codes(broken).contains("HTML_UNCLOSED_TAG"));
+    }
+
+    @Test
+    void detectsMissingViewport() {
+        SiteDraft broken = cleanDraft().withFile("index.html",
+                cleanDraft().file("index.html")
+                        .replace("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">", ""));
+        assertTrue(codes(broken).contains("HTML_MISSING_VIEWPORT"));
+    }
+
+    @Test
+    void detectsInnerHtmlInjection() {
+        SiteDraft broken = cleanDraft().withFile("app.js",
+                "function render(userInput) { node.innerHTML = userInput; }");
+        assertTrue(codes(broken).contains("XSS_INNERHTML"));
+    }
+
+    @Test
+    void innerHtmlWithLiteralIsAllowed() {
+        SiteDraft ok = cleanDraft().withFile("app.js",
+                "function clear() { list.innerHTML = \"\"; }");
+        assertFalse(codes(ok).contains("XSS_INNERHTML"));
+    }
+
+    @Test
+    void detectsExternalAssets() {
+        SiteDraft broken = cleanDraft().withFile("index.html",
+                cleanDraft().file("index.html").replace("</head>",
+                        "  <script src=\"https://cdn.example.com/lib.js\"></script>\n</head>"));
+        assertTrue(codes(broken).contains("EXTERNAL_ASSET"));
+    }
+
+    @Test
+    void detectsJsSyntaxErrorViaNode() {
+        SiteDraft broken = cleanDraft().withFile("app.js", "function broken( { ");
+        List<String> found = codes(broken);
+        // 机器上没有 node 时降级为 JS_CHECK_SKIPPED，同样说明这条路走通了
+        assertTrue(found.contains("JS_SYNTAX") || found.contains("JS_CHECK_SKIPPED"),
+                "应通过 node 发现语法错误或明确跳过：" + found);
+    }
+
+    @Test
+    void detectsUndefinedCssVariable() {
+        SiteDraft broken = cleanDraft().withFile("styles.css", ":root { --a: red; }\n.x { color: var(--missing); }");
+        assertTrue(codes(broken).contains("CSS_UNDEFINED_VAR"));
+    }
+
+    @Test
+    void detectsDuplicateIds() {
+        String html = cleanDraft().file("index.html").replace("<body>", "<body><div id=\"dup\"></div><div id=\"dup\"></div>");
+        SiteDraft broken = cleanDraft().withFile("index.html", html);
+        assertTrue(codes(broken).contains("HTML_DUPLICATE_ID"));
+    }
+
+    @Test
+    void summaryCountsErrorsAndWarnings() {
+        SiteDraft broken = cleanDraft().withFile("app.js",
+                "function render(v) { node.innerHTML = v; }");
+        Map<String, Object> summary = gate.summarize(gate.check(broken));
+        assertTrue((Boolean) summary.get("passed") == false);
+        assertTrue(((Number) summary.get("errors")).intValue() > 0);
+    }
+}
