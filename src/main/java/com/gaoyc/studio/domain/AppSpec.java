@@ -26,7 +26,8 @@ public record AppSpec(
         LANDING("产品落地页"),
         FORM("信息收集表"),
         PRICING("价格方案页"),
-        BLOG("文章列表页");
+        BLOG("文章列表页"),
+        SPA("单页应用");
 
         private final String defaultTitle;
 

@@ -33,6 +33,12 @@ public class SitePublisher {
             if (!file.startsWith(directory)) {
                 throw new IllegalArgumentException("非法文件名：" + entry.getKey());
             }
+            // 多文件产物会放在 assets/css、src 这类子目录里，父目录必须逐级创建，
+            // 否则 Files.writeString 直接抛 NoSuchFileException（多文件布局一上就炸出来的坑）
+            Path parent = file.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
             Files.writeString(file, entry.getValue(), StandardCharsets.UTF_8);
         }
         return "/preview/" + slug + "/index.html";

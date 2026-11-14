@@ -31,8 +31,12 @@ public class PreviewController {
                 .build();
     }
 
-    @GetMapping("/preview/{slug}/{file}")
-    public ResponseEntity<?> file(@PathVariable String slug, @PathVariable String file) {
+    // {*filePath} 捕获剩余全部路径：产物可能放在 assets/css、src 这类子目录里，
+    // 只匹配单段的话 /preview/xxx/assets/js/app.js 会 404
+    @GetMapping("/preview/{slug}/{*filePath}")
+    public ResponseEntity<?> file(@PathVariable String slug,
+                                  @PathVariable("filePath") String filePath) {
+        String file = filePath.startsWith("/") ? filePath.substring(1) : filePath;
         Path root = publisher.root();
         Path directory = root.resolve(slug).normalize();
         Path target = directory.resolve(file).normalize();

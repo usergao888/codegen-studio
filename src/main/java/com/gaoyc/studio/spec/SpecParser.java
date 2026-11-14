@@ -28,7 +28,8 @@ public class SpecParser {
             Archetype.FORM, List.of("表单", "问卷", "报名", "收集", "登记", "填表", "form"),
             Archetype.PRICING, List.of("价格", "定价", "套餐", "收费", "会员", "pricing"),
             Archetype.BLOG, List.of("博客", "文章", "资讯", "专栏", "blog"),
-            Archetype.LANDING, List.of("官网", "落地页", "介绍页", "主页", "首页", "landing")
+            Archetype.LANDING, List.of("官网", "落地页", "介绍页", "主页", "首页", "landing"),
+            Archetype.SPA, List.of("管理后台", "后台管理", "单页应用", "单页", "spa", "vue", "控制台")
     );
 
     private static final Map<String, List<String>> FEATURE_KEYWORDS = Map.of(
@@ -39,7 +40,8 @@ public class SpecParser {
             "chart", List.of("图表", "统计图", "趋势", "柱状", "折线"),
             "rich-text", List.of("富文本", "彩色", "标记", "html 备注", "备注样式"),
             "export", List.of("导出", "下载", "csv"),
-            "icons", List.of("图标", "icon", "插画")
+            "icons", List.of("图标", "icon", "插画"),
+            "multi-file", List.of("多文件", "工程化", "组件化", "目录结构")
     );
 
     private static final String[] PALETTE = {
@@ -119,6 +121,7 @@ public class SpecParser {
             case FORM -> "填完即可提交，提交前会做格式校验。";
             case PRICING -> "按需选择，随时可以升级或降级。";
             case BLOG -> "按主题浏览，点开看全文。";
+            case SPA -> "组件化单页应用，由 Vite 构建。";
         };
     }
 

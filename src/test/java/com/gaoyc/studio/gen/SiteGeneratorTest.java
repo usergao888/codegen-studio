@@ -73,4 +73,24 @@ public class SiteGeneratorTest {
         assertTrue(css.contains("--accent"));
         assertTrue(css.contains("[data-theme=\"dark\"]"));
     }
+
+    @Test
+    void spaProjectHasExpectedSkeleton() throws Exception {
+        SiteDraft draft = generator.generate(parser.parse("做一个管理后台，用 Vue 和组件化"));
+        assertTrue(draft.has("index.html"));
+        assertTrue(draft.has("src/App.vue"), "应有 SFC");
+        assertTrue(draft.has("src/main.js"));
+        assertTrue(draft.has("package.json"));
+        assertTrue(draft.has("vite.config.js"));
+        assertFalse(draft.has("styles.css"), "样式写在 SFC 里，不应再塞一份全局 css");
+
+        String vue = draft.file("src/App.vue");
+        assertTrue(vue.contains("<script setup>"));
+        assertTrue(vue.contains("<template>"));
+
+        // package.json 必须是合法 JSON，否则 npm 直接装不上
+        new com.fasterxml.jackson.databind.ObjectMapper().readTree(draft.file("package.json"));
+        assertTrue(draft.file("index.html").contains("/src/main.js"));
+    }
+
 }

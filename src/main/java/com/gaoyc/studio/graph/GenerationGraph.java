@@ -23,6 +23,7 @@ import com.gaoyc.studio.domain.AppSpec;
 import com.gaoyc.studio.domain.QaIssue;
 import com.gaoyc.studio.domain.SiteDraft;
 import com.gaoyc.studio.domain.StudioState;
+import com.gaoyc.studio.gen.MultiFileLayout;
 import com.gaoyc.studio.gen.SiteWriter;
 import com.gaoyc.studio.llm.ModelRouter;
 import com.gaoyc.studio.publish.SitePublisher;
@@ -163,6 +164,10 @@ public class GenerationGraph {
     private Map<String, Object> generateNode(StudioState state) {
         // 具体走模板还是大模型由 SiteWriter 决定；失败会自动回退模板
         SiteDraft draft = writer.write(state.spec(), state.prompt());
+        // 需求里提到多文件/工程化时，把产物重排到 assets/ 下（模型产物同样适用）
+        if (state.spec().has("multi-file")) {
+            draft = MultiFileLayout.apply(draft);
+        }
         return Map.of(
                 StudioState.DRAFT, draft,
                 StudioState.GENERATOR, writer.backend(),

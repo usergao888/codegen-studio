@@ -107,4 +107,23 @@ public class QaGateTest {
         assertTrue((Boolean) summary.get("passed") == false);
         assertTrue(((Number) summary.get("errors")).intValue() > 0);
     }
+
+    @Test
+    void detectsBrokenAssetRef() {
+        SiteDraft broken = cleanDraft().withFile("index.html",
+                cleanDraft().file("index.html")
+                        .replace("href=\"styles.css\"", "href=\"assets/css/missing.css\""));
+        assertTrue(codes(broken).contains("BROKEN_ASSET_REF"),
+                "引用了不存在的文件应该被拦下：" + codes(broken));
+    }
+
+    @Test
+    void nestedMultifileLayoutStillPasses() {
+        SiteDraft nested = com.gaoyc.studio.gen.MultiFileLayout.apply(cleanDraft());
+        assertTrue(nested.has("assets/css/styles.css"));
+        List<String> found = codes(nested);
+        assertFalse(found.contains("BROKEN_ASSET_REF"), "重排后引用应同步改写：" + found);
+        assertFalse(found.contains("HTML_UNCLOSED_TAG"));
+    }
+
 }

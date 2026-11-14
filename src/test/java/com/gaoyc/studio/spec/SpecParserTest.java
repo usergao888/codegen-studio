@@ -67,4 +67,17 @@ public class SpecParserTest {
         assertEquals(AppSpec.Archetype.LANDING, spec.archetype());
         assertEquals(List.of(), spec.features());
     }
+
+    @Test
+    void detectsSpaArchetype() {
+        AppSpec spec = parser.parse("做一个管理后台，用 Vue 和组件化");
+        assertEquals(AppSpec.Archetype.SPA, spec.archetype());
+        assertTrue(spec.has("multi-file"), "组件化/工程化应识别为多文件需求");
+    }
+
+    @Test
+    void englishSpaKeywordWorks() {
+        assertEquals(AppSpec.Archetype.SPA, parser.parse("build a vue spa").archetype());
+    }
+
 }

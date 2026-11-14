@@ -32,7 +32,12 @@ public class SiteGenerator {
             case FORM -> form(spec);
             case PRICING -> pricing(spec);
             case BLOG -> blog(spec);
+            case SPA -> spa(spec);
         };
+        if (spec.archetype() == AppSpec.Archetype.SPA) {
+            // Vue3 工程把样式写在 SFC 里，再塞一份 styles.css 只会误导
+            return draft.withFile("README.md", readme(spec));
+        }
         return draft.withFile("styles.css", CssLibrary.styles(spec))
                 .withFile("README.md", readme(spec));
     }
@@ -747,6 +752,137 @@ public class SiteGenerator {
                 "body", js);
 
         return SiteDraft.of(Map.of("index.html", shell(spec, body, iconScript(spec)), "app.js", fullJs));
+    }
+
+    // ------------------------------------------------------------------
+    // Vue3 单页应用（SFC 工程骨架）
+    // ------------------------------------------------------------------
+    /**
+     * 生成 Vue3 + Vite 的工程骨架。
+     *
+     * <p>注意：这里是**源码级产物**，要真正跑起来需要 {@code npm install && npm run dev}。
+     * 本仓库离线环境没有 npm 依赖，所以只做结构校验（文件齐全、package.json 合法、
+     * SFC 含 template/script setup），不宣称"构建通过"。
+     */
+    private SiteDraft spa(AppSpec spec) {
+        String html = Template.render("""
+                <!DOCTYPE html>
+                <html lang="${lang}">
+                <head>
+                  <meta charset="UTF-8">
+                  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                  <title>${title}</title>
+                </head>
+                <body>
+                  <div id="app"></div>
+                  <script type="module" src="/src/main.js"></script>
+                </body>
+                </html>
+                """,
+                "lang", spec.language(),
+                "title", spec.title());
+
+        String mainJs = """
+                import { createApp } from 'vue'
+                import App from './App.vue'
+
+                createApp(App).mount('#app')
+                """;
+
+        String appVue = Template.render("""
+                <script setup>
+                import { ref, computed } from 'vue'
+
+                const items = ref([
+                  { id: 1, text: '把需求整理成任务', done: false },
+                  { id: 2, text: '跑一次生成并预览', done: true }
+                ])
+                const filter = ref('all')
+
+                const visible = computed(() => {
+                  if (filter.value === 'active') return items.value.filter(i => !i.done)
+                  if (filter.value === 'done') return items.value.filter(i => i.done)
+                  return items.value
+                })
+
+                function toggle(item) {
+                  item.done = !item.done
+                }
+                </script>
+
+                <template>
+                  <main class="page">
+                    <h1>${title}</h1>
+                    <p class="subtitle">${subtitle}</p>
+                    <div class="filters">
+                      <button
+                        v-for="option in ['all', 'active', 'done']"
+                        :key="option"
+                        :class="['filter', { active: filter === option }]"
+                        @click="filter = option"
+                      >
+                        {{ option === 'all' ? '全部' : option === 'active' ? '进行中' : '已完成' }}
+                      </button>
+                    </div>
+                    <ul class="list">
+                      <li v-for="item in visible" :key="item.id" :class="{ done: item.done }">
+                        <input type="checkbox" :checked="item.done" @change="toggle(item)" />
+                        <span>{{ item.text }}</span>
+                      </li>
+                    </ul>
+                  </main>
+                </template>
+
+                <style scoped>
+                .page { max-width: 720px; margin: 48px auto; padding: 0 20px; font-family: system-ui, sans-serif; }
+                h1 { color: ${accent}; margin-bottom: 4px; }
+                .subtitle { color: #6b7280; margin-top: 0; }
+                .filters { display: flex; gap: 8px; margin: 20px 0; }
+                .filter { padding: 6px 14px; border-radius: 999px; border: 1px solid #e5e7eb; background: #fff; cursor: pointer; }
+                .filter.active { background: ${accent}; color: #fff; border-color: ${accent}; }
+                .list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+                .list li { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 10px; }
+                .list li.done span { text-decoration: line-through; color: #9ca3af; }
+                </style>
+                """,
+                "title", spec.title(), "subtitle", spec.subtitle(), "accent", spec.accent());
+
+        String pkg = """
+                {
+                  "name": "studio-spa",
+                  "private": true,
+                  "version": "0.1.0",
+                  "type": "module",
+                  "scripts": {
+                    "dev": "vite",
+                    "build": "vite build",
+                    "preview": "vite preview"
+                  },
+                  "dependencies": {
+                    "vue": "^3.4.0"
+                  },
+                  "devDependencies": {
+                    "@vitejs/plugin-vue": "^5.0.0",
+                    "vite": "^5.0.0"
+                  }
+                }
+                """;
+
+        String vite = """
+                import { defineConfig } from 'vite'
+                import vue from '@vitejs/plugin-vue'
+
+                export default defineConfig({
+                  plugins: [vue()]
+                })
+                """;
+
+        return SiteDraft.of(Map.of(
+                "index.html", html,
+                "src/main.js", mainJs,
+                "src/App.vue", appVue,
+                "package.json", pkg,
+                "vite.config.js", vite));
     }
 
     // ------------------------------------------------------------------

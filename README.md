@@ -2,7 +2,7 @@
 
 > 一句话描述需求 → 六节点 Agent 工作流 → 产出可运行的前端代码 → 自动质检 → 定向修复 → 立刻可预览。
 
-**Java 21 · Spring Boot 3.5.4 · LangGraph4j 1.6.0-rc2 · Caffeine + Redis · Micrometer · HITL · 可接真实模型 · 71 个单元测试**
+**Java 21 · Spring Boot 3.5.4 · LangGraph4j 1.6.0-rc2 · Caffeine + Redis · Micrometer · HITL · 可接真实模型 · 多文件/Vue3 · 83 个单元测试**
 
 这不是"调一次模型把代码吐出来"的 demo。生成之后的**质检与修复**才是这个项目的重心：
 产物要能被浏览器打开、能被 `node --check` 解析、不能有 XSS 和内网依赖，不达标就自动改，改不动就如实报告。
@@ -93,7 +93,7 @@ Invoke-RestMethod -Uri http://127.0.0.1:18080/api/generate -Method POST `
 
 | 项目 | 数值 |
 | --- | --- |
-| 支持的应用形态 | 6 种（待办 / 看板 / 落地页 / 表单 / 价格页 / 博客） |
+| 支持的应用形态 | 7 种（待办 / 看板 / 落地页 / 表单 / 价格页 / 博客 / Vue3 单页） |
 | 单元测试 | **54 个，全绿** |
 | 三类注入缺陷 | 全部被检出，**1 轮修复后通过**（首轮拦截率 3/3） |
 | 产物可执行性 | 4 个生成站点全部通过 `node --check` |
@@ -104,7 +104,9 @@ Invoke-RestMethod -Uri http://127.0.0.1:18080/api/generate -Method POST `
 | 生成历史 | JSONL 落盘（`var/runs/runs.jsonl`），`/api/runs` 可倒序查最近 N 条，重启后回放 |
 | 发布确认（HITL） | `require-approval=true` 时质检通过后停在发布前：不落盘、无预览地址，`approve` 才发布、`reject` 丢弃 |
 | 真实模型 | `studio.llm.enabled=true` 时走 OpenAI 兼容端点（DeepSeek/Qwen/vLLM/Ollama）；失败自动回退模板 |
-| 单元测试 | **71 个，全绿** |
+| 多文件产物 | 需求含"多文件/工程化"时重排为 `assets/css`、`assets/js`，引用同步改写，预览支持嵌套路径 |
+| Vue3 单页 | 生成 `src/App.vue` + `src/main.js` + `package.json` + `vite.config.js` 工程骨架（**需 npm install 才能构建**） |
+| 单元测试 | **83 个，全绿** |
 
 ---
 
@@ -192,6 +194,30 @@ Prometheus 侧目前暴露 `studio_generations_total`、`studio_cache_hits_total
 
 > 诚实边界：这里验证的是"调用、解析、消毒、回退"四件事，**没有验证真实模型（DeepSeek/Qwen）的产物质量** ——
 > 那需要 API Key 和预算，属于你拿到 key 后的下一步。
+
+### 多文件与 Vue3：能力边界要说清楚
+
+**多文件**是真能力：需求里出现"多文件/工程化/组件化"时，产物会从平坦的三个文件重排成
+
+```
+index.html
+assets/css/styles.css
+assets/js/app.js
+```
+
+引用同步改写，预览也支持嵌套路径。顺带修掉一个真 bug：`SitePublisher` 原来只给 slug 建目录，
+嵌套文件的父目录不存在，一碰多文件就 `NoSuchFileException`。
+
+**Vue3 是"源码骨架"，不是"可构建应用"**：生成 `src/App.vue` + `src/main.js` + `package.json`
++ `vite.config.js`，离线环境没有 npm 依赖，所以只做结构校验（文件齐全、`package.json` 是合法 JSON、
+SFC 含 `<template>` 与 `<script setup>`），**不宣称构建通过**。要真的跑起来需要：
+
+```bash
+cd var/sites/<slug> && npm install && npm run dev
+```
+
+另外新增一条质检规则 `BROKEN_ASSET_REF`：`src`/`href` 指向的本地文件必须真实存在 ——
+模板改名或模型给了路径却没给文件时，页面会白屏，机器能查就不该留给人眼。
 
 ## 五、三次"交学费"的记录
 

@@ -19,6 +19,7 @@ public final class TestMain {
     private static final List<Class<?>> SUITES = List.of(
             com.gaoyc.studio.spec.SpecParserTest.class,
             com.gaoyc.studio.gen.SiteGeneratorTest.class,
+            com.gaoyc.studio.gen.MultiFileLayoutTest.class,
             com.gaoyc.studio.qa.QaGateTest.class,
             com.gaoyc.studio.repair.RepairerTest.class,
             com.gaoyc.studio.cache.TwoLevelCacheTest.class,
@@ -28,7 +29,8 @@ public final class TestMain {
             com.gaoyc.studio.llm.ModelRouterTest.class,
             com.gaoyc.studio.llm.LlmSiteWriterTest.class,
             com.gaoyc.studio.repository.JsonFileRunRepositoryTest.class,
-            com.gaoyc.studio.service.ApprovalServiceTest.class
+            com.gaoyc.studio.service.ApprovalServiceTest.class,
+            com.gaoyc.studio.publish.SitePublisherTest.class
     );
 
     private TestMain() {
