@@ -1,4 +1,4 @@
-﻿# 跑测试（45 个 JUnit 5 用例）
+# 跑测试（88 个 JUnit 5 用例）
 #
 # 为什么不用 mvn test：本机 ~/.m2 缺 maven-surefire-plugin 的依赖链，离线跑不起来。
 # 这里用 TestMain 反射直接调 @Test 方法，断言仍是 JUnit 的；换到有网的机器上 mvn test 一样能跑。

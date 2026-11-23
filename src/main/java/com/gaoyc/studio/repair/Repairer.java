@@ -35,26 +35,42 @@ public class Repairer {
         for (String code : issues.stream().map(QaIssue::code).distinct().toList()) {
             switch (code) {
                 case "XSS_INNERHTML" -> {
-                    String js = current.file("app.js");
-                    String fixed = INNER_HTML_ASSIGN.matcher(js).replaceAll(".textContent$1=$2");
-                    fixed = fixed.replace("  // unsafe:rich-text\n", "");
-                    if (!fixed.equals(js)) {
-                        current = current.withFile("app.js", fixed);
-                        applied.add("XSS_INNERHTML → innerHTML 改为 textContent");
+                    List<String> touched = new ArrayList<>();
+                    for (String name : filesEndingWith(current, ".js")) {
+                        String js = current.file(name);
+                        String fixed = INNER_HTML_ASSIGN.matcher(js).replaceAll(".textContent$1=$2");
+                        fixed = fixed.replace("  // unsafe:rich-text\n", "");
+                        if (!fixed.equals(js)) {
+                            current = current.withFile(name, fixed);
+                            touched.add(name);
+                        }
+                    }
+                    if (!touched.isEmpty()) {
+                        applied.add("XSS_INNERHTML → innerHTML 改为 textContent（"
+                                + String.join(", ", touched) + "）");
                     }
                 }
                 case "EXTERNAL_ASSET" -> {
-                    String html = current.file("index.html");
-                    String fixed = stripExternalAssets(html);
-                    if (!fixed.equals(html)) {
-                        current = current.withFile("index.html", fixed);
-                        applied.add("EXTERNAL_ASSET → 移除 CDN 外链，改为本地/内联实现");
+                    List<String> touched = new ArrayList<>();
+                    for (String name : filesEndingWith(current, ".html")) {
+                        String html = current.file(name);
+                        String fixed = stripExternalAssets(html);
+                        if (!fixed.equals(html)) {
+                            current = current.withFile(name, fixed);
+                            touched.add(name);
+                        }
                     }
-                    String js = current.file("app.js");
-                    String jsFixed = stripExternalHooks(js);
-                    if (!jsFixed.equals(js)) {
-                        current = current.withFile("app.js", jsFixed);
-                        applied.add("EXTERNAL_ASSET → 移除对 CDN 全局对象的调用");
+                    for (String name : filesEndingWith(current, ".js")) {
+                        String js = current.file(name);
+                        String jsFixed = stripExternalHooks(js);
+                        if (!jsFixed.equals(js)) {
+                            current = current.withFile(name, jsFixed);
+                            touched.add(name);
+                        }
+                    }
+                    if (!touched.isEmpty()) {
+                        applied.add("EXTERNAL_ASSET → 移除 CDN 外链/全局调用（"
+                                + String.join(", ", touched) + "）");
                     }
                 }
                 case "HTML_MISSING_VIEWPORT" -> {
@@ -83,6 +99,12 @@ public class Repairer {
         Map<String, String> unused = new LinkedHashMap<>();
         unused.size();
         return new RepairOutcome(current, List.copyOf(applied));
+    }
+
+    private List<String> filesEndingWith(SiteDraft draft, String suffix) {
+        return draft.files().keySet().stream()
+                .filter(name -> name.toLowerCase().endsWith(suffix))
+                .toList();
     }
 
     private String stripExternalAssets(String html) {

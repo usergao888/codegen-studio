@@ -126,4 +126,37 @@ public class QaGateTest {
         assertFalse(found.contains("HTML_UNCLOSED_TAG"));
     }
 
+    @Test
+    void detectsXssInNestedMultifileJs() {
+        SiteDraft nested = com.gaoyc.studio.gen.MultiFileLayout.apply(cleanDraft());
+        SiteDraft broken = nested.withFile("assets/js/app.js",
+                "function render(v) { node.innerHTML = v; }");
+        assertTrue(codes(broken).contains("XSS_INNERHTML"),
+                "assets/js/app.js 也必须进 QA：" + codes(broken));
+    }
+
+    @Test
+    void detectsXssInInlineScript() {
+        String html = cleanDraft().file("index.html").replace("</body>",
+                "<script>document.body.innerHTML = location.hash;</script></body>");
+        SiteDraft broken = cleanDraft().withFile("index.html", html);
+        assertTrue(codes(broken).contains("XSS_INNERHTML"),
+                "内联脚本不能绕过 app.js 的检查：" + codes(broken));
+    }
+
+    @Test
+    void detectsTemplateLiteralInterpolation() {
+        SiteDraft broken = cleanDraft().withFile("app.js",
+                "function render(v) { node.innerHTML = `<b>${v}</b>`; }");
+        assertTrue(codes(broken).contains("XSS_INNERHTML"),
+                "含 ${} 的模板字面量不是安全值");
+    }
+
+    @Test
+    void staticTemplateLiteralIsAllowed() {
+        SiteDraft ok = cleanDraft().withFile("app.js",
+                "function clear() { list.innerHTML = `<b>静态</b>`; }");
+        assertFalse(codes(ok).contains("XSS_INNERHTML"));
+    }
+
 }

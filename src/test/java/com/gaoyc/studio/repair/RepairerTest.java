@@ -46,6 +46,18 @@ public class RepairerTest {
     }
 
     @Test
+    void repairsXssInNestedMultifileJs() {
+        SiteDraft nested = com.gaoyc.studio.gen.MultiFileLayout.apply(
+                generator.generate(parser.parse("做一个待办清单")));
+        SiteDraft dirty = nested.withFile("assets/js/app.js",
+                "function render(v) { node.innerHTML = v; }");
+
+        Repairer.RepairOutcome outcome = repairer.repair(dirty, gate.check(dirty));
+        assertFalse(outcome.draft().file("assets/js/app.js").contains("innerHTML = "));
+        assertFalse(errorCodes(outcome.draft()).contains("XSS_INNERHTML"));
+    }
+
+    @Test
     void repairsMissingViewport() {
         SiteDraft dirty = generator.generate(parser.parse("给 PC 端做一个官网介绍页"));
         Repairer.RepairOutcome outcome = repairer.repair(dirty, gate.check(dirty));

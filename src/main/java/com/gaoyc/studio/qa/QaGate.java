@@ -1,5 +1,6 @@
 package com.gaoyc.studio.qa;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -39,24 +40,28 @@ public class QaGate {
     public List<QaIssue> check(SiteDraft draft) {
         List<QaIssue> issues = new ArrayList<>();
 
-        String html = draft.file("index.html");
-        if (html.isBlank()) {
+        String index = draft.file("index.html");
+        if (index.isBlank()) {
             issues.add(QaIssue.error("MISSING_ENTRY", "index.html", "没有生成入口页面"));
             return issues;
         }
-        issues.addAll(htmlValidator.validate(html, "index.html"));
-        issues.addAll(policyValidator.validateHtml(html, "index.html"));
-        issues.addAll(checkAssetRefs(draft));
 
-        String css = draft.file("styles.css");
-        if (!css.isBlank()) {
-            issues.addAll(cssValidator.validate(css, "styles.css"));
-        }
-
-        String js = draft.file("app.js");
-        if (!js.isBlank()) {
-            issues.addAll(jsValidator.validate(js, "app.js"));
-            issues.addAll(policyValidator.validateJs(js, "app.js"));
+        // 校验所有文件，而不是只认 index.html / styles.css / app.js：
+        // 多文件布局会把脚本放到 assets/js，Vue 骨架还会出现 src/App.vue。
+        for (Map.Entry<String, String> file : draft.files().entrySet()) {
+            String name = file.getKey();
+            String content = file.getValue();
+            String lower = name.toLowerCase();
+            if (lower.endsWith(".html") || lower.endsWith(".htm")) {
+                issues.addAll(htmlValidator.validate(content, name));
+                issues.addAll(policyValidator.validateHtml(content, name));
+                issues.addAll(checkAssetRefs(draft, name, content));
+            } else if (lower.endsWith(".css")) {
+                issues.addAll(cssValidator.validate(content, name));
+            } else if (lower.endsWith(".js") || lower.endsWith(".mjs")) {
+                issues.addAll(jsValidator.validate(content, name));
+                issues.addAll(policyValidator.validateJs(content, name));
+            }
         }
 
         issues.sort(Comparator
@@ -70,25 +75,38 @@ public class QaGate {
      *
      * <p>这条规则抓的是"生成时引用了不存在的文件"：模板改名、模型给出了 assets 路径却没给文件，
      * 页面打开就是白屏或没样式 —— 机器能查，就不该留给人眼。
-     * 外链、锚点、data: 与根绝对路径（SPA 由构建决定）跳过。
+     * 外链、锚点、data:、mailto: 与根绝对路径（SPA 由构建决定）跳过。
      */
-    private List<QaIssue> checkAssetRefs(SiteDraft draft) {
+    private List<QaIssue> checkAssetRefs(SiteDraft draft, String htmlName, String html) {
         List<QaIssue> issues = new ArrayList<>();
         Set<String> files = draft.files().keySet();
         Set<String> seen = new LinkedHashSet<>();
-        Matcher matcher = LOCAL_REF.matcher(draft.file("index.html"));
+        Path base = Path.of(htmlName).getParent();
+        Matcher matcher = LOCAL_REF.matcher(html);
         while (matcher.find()) {
             String ref = matcher.group(1).trim();
             if (ref.isEmpty() || ref.startsWith("#") || ref.startsWith("http")
-                    || ref.startsWith("//") || ref.startsWith("data:") || ref.startsWith("/")) {
+                    || ref.startsWith("//") || ref.startsWith("data:") || ref.startsWith("/")
+                    || ref.startsWith("mailto:") || ref.startsWith("tel:")
+                    || ref.startsWith("javascript:")) {
                 continue;
             }
-            if (!seen.add(ref)) {
+            String clean = ref.split("[?#]", 2)[0].trim();
+            if (clean.isEmpty() || !seen.add(clean)) {
                 continue;
             }
-            if (!files.contains(ref)) {
-                issues.add(QaIssue.error("BROKEN_ASSET_REF", "index.html",
-                        "引用了不存在的文件：" + ref));
+            String resolved;
+            try {
+                resolved = (base == null ? Path.of(clean) : base.resolve(clean))
+                        .normalize().toString().replace('\\', '/');
+            } catch (RuntimeException e) {
+                issues.add(QaIssue.error("BROKEN_ASSET_REF", htmlName,
+                        "非法的资源引用：" + ref));
+                continue;
+            }
+            if (!files.contains(resolved)) {
+                issues.add(QaIssue.error("BROKEN_ASSET_REF", htmlName,
+                        "引用了不存在的文件：" + resolved));
             }
         }
         return issues;
