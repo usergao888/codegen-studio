@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import com.gaoyc.studio.auth.TenantContext;
 import com.gaoyc.studio.domain.GenerationResult;
 import com.gaoyc.studio.metrics.StudioMetrics;
 import com.gaoyc.studio.repository.RunRepository;
@@ -53,7 +54,8 @@ public class StudioController {
         }
         try {
             GenerationResult result = service.generate(request.prompt(), resolveUser(request, headerUser),
-                    clientIp(httpRequest));
+                    clientIp(httpRequest), TenantContext.tenant(), event -> {
+                    });
             return ResponseEntity.ok(result);
         } catch (GenerationService.InvalidPromptException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -76,7 +78,8 @@ public class StudioController {
 
         CompletableFuture.runAsync(() -> {
             try {
-                GenerationResult result = service.generate(prompt, user, ip, event -> {
+                GenerationResult result = service.generate(prompt, user, ip,
+                        TenantContext.tenant(), event -> {
                     try {
                         emitter.send(SseEmitter.event().name("node").data(event));
                     } catch (IOException ignored) {

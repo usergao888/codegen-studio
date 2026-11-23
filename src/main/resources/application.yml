@@ -40,6 +40,13 @@ studio:
       endpoint:
         permits-per-second: 50
         burst: 100
+  # API Key 鉴权：X-API-Key -> tenant；/api/health 与 /preview 公开
+  # 本地 demo 默认关闭；生产用环境变量开启，不要把真实 key 写进本文件：
+  #   STUDIO_AUTH_ENABLED=true
+  #   STUDIO_AUTH_KEYS=key1:tenant-a,key2:tenant-b
+  auth:
+    enabled: false
+    keys: ""
   # 多模型路由的档位（离线时用 deterministic 桩）
   models:
     small: deepseek-chat

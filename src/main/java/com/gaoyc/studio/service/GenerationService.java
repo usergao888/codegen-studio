@@ -78,6 +78,15 @@ public class GenerationService {
 
     public GenerationResult generate(String prompt, String userId, String clientIp,
                                      Consumer<NodeEvent> listener) {
+        return generate(prompt, userId, clientIp, "default", listener);
+    }
+
+    /**
+     * 带租户的生成入口。缓存 key 与限流用户 key 都包含 tenant：
+     * 同一句需求在不同租户下必须是不同缓存项，不能串产物/串 runId。
+     */
+    public GenerationResult generate(String prompt, String userId, String clientIp,
+                                     String tenant, Consumer<NodeEvent> listener) {
         String normalized = normalize(prompt);
         if (normalized.isEmpty()) {
             throw new InvalidPromptException("需求不能为空");
@@ -85,17 +94,19 @@ public class GenerationService {
         if (normalized.length() > 500) {
             throw new InvalidPromptException("需求过长，请控制在 500 字以内");
         }
+        String tenantKey = tenant == null || tenant.isBlank() ? "default" : tenant.trim();
+        String cacheKey = cacheKey(tenantKey, normalized);
 
-        Optional<GenerationResult> cached = cache.get(normalized);
+        Optional<GenerationResult> cached = cache.get(cacheKey);
         if (cached.isPresent()) {
             metrics.recordCacheHit();
             listener.accept(new NodeEvent("cache", true, 0));
             return cached.get().asCached();
         }
 
-        // 三级同判：用户 / IP / 接口，任意一级超限即拒绝
+        // 三级同判：租户内用户 / IP / 接口，任意一级超限即拒绝
         MultiLevelRateLimiter.Decision decision = rateLimiter.tryAcquire(Map.of(
-                "user", userId == null || userId.isBlank() ? "anonymous" : userId,
+                "user", tenantKey + ":" + (userId == null || userId.isBlank() ? "anonymous" : userId),
                 "ip", clientIp == null || clientIp.isBlank() ? "unknown" : clientIp,
                 "endpoint", "generate"));
         if (!decision.allowed()) {
@@ -140,7 +151,7 @@ public class GenerationService {
 
         // 待确认的产物不进缓存：审批结果不确定，缓存住会让后续请求一直拿到 pending
         if (!result.isPending()) {
-            cache.put(normalized, result);
+            cache.put(cacheKey, result);
         } else {
             approvalService.stage(result, normalized, draft);
         }
@@ -154,6 +165,11 @@ public class GenerationService {
         }
         runRepository.save(RunRecord.of(result, normalized));
         return result;
+    }
+
+    static String cacheKey(String tenant, String normalized) {
+        return (tenant == null || tenant.isBlank() ? "default" : tenant.trim())
+                + "|" + normalized;
     }
 
     public TwoLevelCache<String, GenerationResult> cache() {

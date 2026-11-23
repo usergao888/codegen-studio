@@ -2,7 +2,7 @@
 
 > 一句话描述需求 → 六节点 Agent 工作流 → 产出可运行的前端代码 → 自动质检 → 定向修复 → 立刻可预览。
 
-**Java 21 · Spring Boot 3.5.4 · LangGraph4j 1.6.0-rc2 · Caffeine + Redis · Micrometer · HITL · 可接真实模型 · 多文件/Vue3 · 88 个单元测试**
+**Java 21 · Spring Boot 3.5.4 · LangGraph4j 1.6.0-rc2 · Caffeine + Redis · Micrometer · HITL · 可接真实模型 · 多文件/Vue3 · 92 个单元测试**
 
 这不是"调一次模型把代码吐出来"的 demo。生成之后的**质检与修复**才是这个项目的重心：
 产物要能被浏览器打开、能被 `node --check` 解析、不能有 XSS 和内网依赖，不达标就自动改，改不动就如实报告。
@@ -58,7 +58,7 @@ START → parse → enhance → generate → qa ─┬─(无阻塞缺陷)──
 # 2. 构建（离线可用，依赖已在本地 Maven 仓库）
 .\scripts\build.ps1
 
-# 3. 跑测试（88 个）
+# 3. 跑测试（92 个）
 .\scripts\test.ps1
 
 # 4. 启动
@@ -77,6 +77,27 @@ Invoke-RestMethod -Uri http://127.0.0.1:18080/api/generate -Method POST `
 
 返回里带 `previewUrl`，浏览器打开就是刚生成的应用（纯静态、无 CDN、断网可用）。
 
+### 鉴权与租户
+
+本地 demo 默认 `studio.auth.enabled=false`。生产开启：
+
+```powershell
+$env:STUDIO_AUTH_ENABLED='true'
+$env:STUDIO_AUTH_KEYS='key-a:tenant-a,key-b:tenant-b'
+```
+
+请求带 `X-API-Key`；`/api/health` 与 `/preview/**` 公开。缓存 key 是 `tenant|prompt`，
+限流用户 key 是 `tenant:user` —— 同一需求在不同租户下不会串产物/串 runId。
+
+```powershell
+curl.exe -H "X-API-Key: key-a" -H "Content-Type: application/json" `
+  -d '{\"prompt\":\"做一个待办清单\",\"userId\":\"u1\"}' `
+  http://127.0.0.1:18080/api/generate
+```
+
+> 不要把真实 key 写进 `application.yml` 或 git；用环境变量注入。
+> 当前 `/api/runs`、`/api/approvals` 只做了登录门禁，还没有按租户过滤行数据。
+
 ### 接口
 
 | 方法 | 路径 | 说明 |
@@ -94,7 +115,7 @@ Invoke-RestMethod -Uri http://127.0.0.1:18080/api/generate -Method POST `
 | 项目 | 数值 |
 | --- | --- |
 | 支持的应用形态 | 7 种（待办 / 看板 / 落地页 / 表单 / 价格页 / 博客 / Vue3 单页） |
-| 单元测试 | **88 个，全绿** |
+| 单元测试 | **92 个，全绿** |
 | 三类注入缺陷 | 全部被检出，**1 轮修复后通过**（首轮拦截率 3/3） |
 | 产物可执行性 | 4 个生成站点全部通过 `node --check` |
 | 限流 | 同一用户 25 次连打：18 次 200 + **7 次 429**；Redis 里可见 user/ip/endpoint 三级桶 |
@@ -106,7 +127,7 @@ Invoke-RestMethod -Uri http://127.0.0.1:18080/api/generate -Method POST `
 | 真实模型 | `studio.llm.enabled=true` 时走 OpenAI 兼容端点（DeepSeek/Qwen/vLLM/Ollama）；失败自动回退模板 |
 | 多文件产物 | 需求含"多文件/工程化"时重排为 `assets/css`、`assets/js`，引用同步改写，预览支持嵌套路径 |
 | Vue3 单页 | 生成 `src/App.vue` + `src/main.js` + `package.json` + `vite.config.js` 工程骨架（**需 npm install 才能构建**） |
-| 单元测试 | **88 个，全绿** |
+| 单元测试 | **92 个，全绿** |
 
 ---
 
@@ -252,7 +273,7 @@ codegen-studio/
 │   ├── publish/        SitePublisher
 │   ├── metrics/        StudioMetrics
 │   └── domain/         AppSpec / SiteDraft / QaIssue / StudioState / GenerationResult
-├── src/test/java/      88 个 JUnit 5 用例 + TestMain（离线反射运行器）
+├── src/test/java/      92 个 JUnit 5 用例 + TestMain（离线反射运行器）
 ├── scripts/            use-jdk / build / test / run
 └── var/                生成产物与 classpath 缓存（不入库）
 ```

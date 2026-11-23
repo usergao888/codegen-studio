@@ -30,6 +30,8 @@ public final class TestMain {
             com.gaoyc.studio.llm.LlmSiteWriterTest.class,
             com.gaoyc.studio.repository.JsonFileRunRepositoryTest.class,
             com.gaoyc.studio.service.ApprovalServiceTest.class,
+            com.gaoyc.studio.service.GenerationServiceCacheKeyTest.class,
+            com.gaoyc.studio.auth.ApiKeyAuthInterceptorTest.class,
             com.gaoyc.studio.publish.SitePublisherTest.class
     );
 
